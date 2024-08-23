@@ -15,6 +15,7 @@ using System.Threading.Tasks;
 using CommandLine;
 using CommandLine.Text;
 using DotNet.Globbing;
+using System.Data;
 
 // 有关程序集的一般信息由以下
 // 控制。更改这些特性值可修改
@@ -201,7 +202,8 @@ namespace unify_builder
 
         private OsInfo()
         {
-            OsType = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "win32" : "linux";
+            OsType = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "win32" :
+                     (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) ? "linux" : "OSX");
             CRLF = OsType == "win32" ? "\r\n" : "\n";
         }
 
@@ -873,7 +875,7 @@ namespace unify_builder
 
         public string getUserSpecifiedModelName(string modelName)
         {
-            if (!paramObj[modelName].ContainsKey("$use")) 
+            if (!paramObj[modelName].ContainsKey("$use"))
                 return modelName;
 
             var name = paramObj[modelName]["$use"].Value<string>();
@@ -881,9 +883,9 @@ namespace unify_builder
             if (string.IsNullOrWhiteSpace(name))
                 return modelName;
 
-            if (name.StartsWith(modelName + "-") || name == modelName) 
+            if (name.StartsWith(modelName + "-") || name == modelName)
                 return name;
-            
+
             return modelName + '-' + name;
         }
 
@@ -1046,7 +1048,7 @@ namespace unify_builder
             // ---
             // For COSMIC STM8 clnk
             //  - We need put all objs into *.lkf files
-            if (compilerId == "COSMIC_STM8" && 
+            if (compilerId == "COSMIC_STM8" &&
                 getUserSpecifiedModelName("linker") == "linker")
             {
                 string usrLkfPath = null;
@@ -1704,7 +1706,7 @@ namespace unify_builder
 
                         if (mRes.Success && mRes.Groups.Count > 1)
                         {
-                            srcOpts   = mRes.Groups[1].Value.Trim();
+                            srcOpts = mRes.Groups[1].Value.Trim();
                             overrided = true;
                         }
                         else
@@ -1730,7 +1732,8 @@ namespace unify_builder
                         var oldVal = mRes.Groups["old"].Value.Trim();
                         var newVal = "";
 
-                        if (mRes.Groups.ContainsKey("new")) {
+                        if (mRes.Groups.ContainsKey("new"))
+                        {
                             newVal = mRes.Groups["new"].Value.Trim();
                         }
 
@@ -2281,14 +2284,14 @@ namespace unify_builder
         class MapRegion
         {
             public string name;
-            public uint   addr;
-            public uint   size;
-            public uint   max_size;
+            public uint addr;
+            public uint size;
+            public uint max_size;
         };
 
         class MapRegionItem
         {
-            public MapRegion   attr;
+            public MapRegion attr;
             public MapRegion[] children;
         };
 
@@ -2596,7 +2599,7 @@ namespace unify_builder
                 }
 
                 // load user object order
-                if (paramsObj.ContainsKey("options") && 
+                if (paramsObj.ContainsKey("options") &&
                     (paramsObj["options"] as JObject).ContainsKey("linker") &&
                     (paramsObj["options"]["linker"] as JObject).ContainsKey("object-order") &&
                     (paramsObj["options"]["linker"]["object-order"] is JArray objOrderList))
@@ -3185,10 +3188,10 @@ namespace unify_builder
                 if (checkMode(BuilderMode.FAST))
                 {
                     CheckDiffRes res = checkDiff(cmdGen.getCompilerId(), commands);
-                    src_count_c   = res.cCount;
+                    src_count_c = res.cCount;
                     src_count_cpp = res.cppCount;
                     src_count_asm = res.asmCount;
-                    commands      = res.totalCmds;
+                    commands = res.totalCmds;
                     infoWithLable("file statistics (incremental mode)\r\n");
                 }
 
@@ -3274,7 +3277,7 @@ namespace unify_builder
                         if (exitCode > ERR_LEVEL)
                         {
                             errLogs.Add(ccLog);
-                            string msg = "compilation failed at : \"" + cmdInfo.sourcePath + "\", exit code: " + exitCode.ToString() 
+                            string msg = "compilation failed at : \"" + cmdInfo.sourcePath + "\", exit code: " + exitCode.ToString()
                                        + "\ncommand: \n  " + cmdInfo.shellCommand;
                             throw new Exception(msg);
                         }
@@ -3371,6 +3374,13 @@ namespace unify_builder
 
                 CmdGenerator.CmdInfo linkInfo = cmdGen.genLinkCommand(allObjs.ToArray());
 
+                // ARM Compiler 6 on macOS only.
+                // ref: https://github.com/ARM-software/vscode-environment-manager/issues/6
+                if (cmdGen.getCompilerId() == "AC6" && OsInfo.instance().OsType == "OSX")
+                {
+                    linkInfo.commandLine = " --lto_liblto_location=%TOOL_DIR%/bin/libLTO.dylib " + linkInfo.commandLine;
+                }
+
                 int linkerExitCode = runExe(linkInfo.exePath, linkInfo.commandLine, out string linkerOut, linkInfo.outputEncoding);
 
                 if (!string.IsNullOrEmpty(linkerOut.Trim()))
@@ -3462,7 +3472,7 @@ namespace unify_builder
                                 printProgress("  ROM: ", (float)rom_size / rom_max_size, s);
                             }
                         }
-                        
+
                         if (ccID == "ac5" || ccID == "ac6")
                         {
                             parseMapRegionInfoForArmlink(mapFileFullPath, out MapRegionInfo mapinfo);
@@ -3502,7 +3512,7 @@ namespace unify_builder
                                             printRegion(child, _max_len, 2, "- ");
                                         }
                                     }
-                                    else 
+                                    else
                                     {
                                         log("".PadRight(2 * 2) + "  " + "** This load region have no execution regions. **");
                                     }
@@ -3641,11 +3651,11 @@ namespace unify_builder
             {
                 if (size > 1024 * 1024)
                 {
-                    return $"{size/(1024.0f * 1024.0f):f1}MB";
+                    return $"{size / (1024.0f * 1024.0f):f1}MB";
                 }
                 else
                 {
-                    return $"{size/(1024.0f):f1}KB";
+                    return $"{size / (1024.0f):f1}KB";
                 }
             }
             else
@@ -3669,7 +3679,7 @@ namespace unify_builder
                     };
 
                     region.name = m.Groups["name"].Value;
-                    var attrs   = m.Groups["attrs"].Value.Split(',');
+                    var attrs = m.Groups["attrs"].Value.Split(',');
                     foreach (var attr in attrs)
                     {
                         var parts = attr.Split(':');
@@ -3696,7 +3706,7 @@ namespace unify_builder
 
             List<MapRegionItem> load_regions = new(4);
 
-            MapRegionItem   cur_region = null;
+            MapRegionItem cur_region = null;
             List<MapRegion> cur_children = new(10);
 
             foreach (string _line in File.ReadLines(mapFileFullPath))
@@ -3711,14 +3721,14 @@ namespace unify_builder
                     var region = parseRegion(line_trimed);
                     if (region != null)
                     {
-                        if (cur_region != null) 
+                        if (cur_region != null)
                         {
                             cur_region.children = cur_children.ToArray();
                             load_regions.Add(cur_region);
                         }
 
                         cur_region = new MapRegionItem {
-                            attr     = region,
+                            attr = region,
                             children = null,
                         };
                         cur_children.Clear();
@@ -4256,7 +4266,7 @@ namespace unify_builder
             }
         }
 
-        public static void setEnvVariable(string key, string value) 
+        public static void setEnvVariable(string key, string value)
         {
             setEnvValue(key, value);
         }
@@ -4953,7 +4963,7 @@ namespace unify_builder
                     e.Message);
             }
 
-            if (diffLogs.Count > 0) 
+            if (diffLogs.Count > 0)
             {
                 appendLogs($"[info] incremental build: {diffLogs.Count} source files changed",
                     "These source files will be recompiled", diffLogs.ToArray());
